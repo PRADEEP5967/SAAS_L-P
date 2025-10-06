@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useState, useEffect } from "react";
+import { supabase } from "@/lib/supabase/client";
 
 interface User {
   id: string;
@@ -24,13 +25,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check for saved session
     const checkAuth = async () => {
       try {
-        const response = await fetch("/api/auth/session");
-        const data = await response.json();
-        if (data.data?.user) {
-          setUser(data.data.user);
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+          setUser({
+            id: session.user.id,
+            email: session.user.email!,
+            name: session.user.user_metadata?.name,
+          });
         }
       } catch (error) {
         console.error("Auth check failed:", error);
@@ -40,28 +43,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
 
     checkAuth();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        setUser({
+          id: session.user.id,
+          email: session.user.email!,
+          name: session.user.user_metadata?.name,
+        });
+      } else {
+        setUser(null);
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   const signIn = async (email: string, password: string) => {
     try {
-      const response = await fetch("/api/auth/signin", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
       });
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error?.message || "Sign in failed");
-      }
+      if (error) throw error;
 
-      const data = await response.json();
-      setUser(data.data.user);
-
-      // Set cookie from response headers if present
-      const sessionCookie = response.headers.get("set-cookie");
-      if (sessionCookie) {
-        document.cookie = sessionCookie;
+      if (data.user) {
+        setUser({
+          id: data.user.id,
+          email: data.user.email!,
+          name: data.user.user_metadata?.name,
+        });
       }
     } catch (error) {
       console.error("Sign in error:", error);
@@ -71,19 +85,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signUp = async (email: string, password: string, name: string) => {
     try {
-      const response = await fetch("/api/auth/signup", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password, name }),
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            name,
+          },
+        },
       });
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error?.message || "Sign up failed");
-      }
+      if (error) throw error;
 
-      const data = await response.json();
-      setUser(data.data.user);
+      if (data.user) {
+        setUser({
+          id: data.user.id,
+          email: data.user.email!,
+          name: data.user.user_metadata?.name,
+        });
+      }
     } catch (error) {
       console.error("Sign up error:", error);
       throw error;
@@ -92,7 +112,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = async () => {
     try {
-      await fetch("/api/auth/signout", { method: "POST" });
+      await supabase.auth.signOut();
       setUser(null);
     } catch (error) {
       console.error("Sign out error:", error);
@@ -102,16 +122,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const forgotPassword = async (email: string) => {
     try {
-      const response = await fetch("/api/auth/forgot-password", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/auth/reset-password`,
       });
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error?.message || "Password reset request failed");
-      }
+      if (error) throw error;
     } catch (error) {
       console.error("Forgot password error:", error);
       throw error;

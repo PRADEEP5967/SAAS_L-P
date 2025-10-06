@@ -40,9 +40,6 @@ export default function SignInPage() {
           <CardDescription>
             Enter your email and password to access your account
           </CardDescription>
-          <div className="text-sm text-muted-foreground bg-muted p-2 rounded">
-            Demo credentials: demo@example.com / password
-          </div>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">

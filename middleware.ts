@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { jwtVerify } from "jose";
+import { createClient } from '@supabase/supabase-js';
 
 // Paths that require authentication
 const protectedPaths = [
@@ -20,11 +20,28 @@ const publicApiPaths = [
   "/api/health",
 ];
 
-async function verifyToken(token: string) {
+async function getUser(request: NextRequest) {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    return null;
+  }
+
+  const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      persistSession: false,
+    },
+    global: {
+      headers: {
+        cookie: request.headers.get('cookie') || '',
+      },
+    },
+  });
+
   try {
-    const secret = new TextEncoder().encode(process.env.JWT_SECRET || "fallback-secret");
-    const { payload } = await jwtVerify(token, secret);
-    return payload;
+    const { data: { user } } = await supabase.auth.getUser();
+    return user;
   } catch (error) {
     return null;
   }
@@ -48,43 +65,30 @@ export async function middleware(request: NextRequest) {
   const isPublicApiPath = publicApiPaths.some(path => pathname.startsWith(path));
 
   // For API routes, check authentication
-  if (pathname.startsWith("/api/") && !isPublicApiPath) {
-    const token = request.cookies.get("session")?.value ||
-                  request.headers.get("authorization")?.replace("Bearer ", "");
+  if (pathname.startsWith("/api/") && !isPublicApiPath && isProtectedPath) {
+    const user = await getUser(request);
 
-    if (isProtectedPath && !token) {
+    if (!user) {
       return NextResponse.json(
         { error: "Authentication required" },
         { status: 401 }
       );
     }
-
-    if (token) {
-      const payload = await verifyToken(token);
-      if (!payload) {
-        const response = NextResponse.json(
-          { error: "Invalid token" },
-          { status: 401 }
-        );
-        response.cookies.delete("session");
-        return response;
-      }
-    }
   }
 
   // For page routes, handle redirects
   if (!pathname.startsWith("/api/")) {
-    const session = request.cookies.get("session")?.value;
+    const user = await getUser(request);
 
     // If trying to access protected path without session, redirect to login
-    if (isProtectedPath && !session) {
+    if (isProtectedPath && !user) {
       const url = new URL("/auth/signin", request.url);
       url.searchParams.set("from", pathname);
       return NextResponse.redirect(url);
     }
 
     // If trying to access auth paths with session, redirect to dashboard
-    if (isAuthPath && session) {
+    if (isAuthPath && user) {
       return NextResponse.redirect(new URL("/dashboard", request.url));
     }
   }
@@ -94,13 +98,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    /*
-     * Match all request paths except for the ones starting with:
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     * - public folder
-     */
     "/((?!_next/static|_next/image|favicon.ico|public).*)",
   ],
 };

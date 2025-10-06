@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { useDashboard } from "@/hooks/use-dashboard";
+import { useDashboardMetrics } from "@/hooks/use-dashboard-metrics";
 import { formatMetricValue } from "@/lib/utils/metrics";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -22,13 +22,13 @@ export function DashboardMetrics() {
     error,
     filter,
     setFilter,
-    refresh,
+    refetch,
     exportMetrics,
-  } = useDashboard();
+  } = useDashboardMetrics();
 
   useEffect(() => {
-    refresh();
-  }, [refresh]);
+    refetch();
+  }, [refetch]);
 
   if (error) {
     return (
@@ -81,7 +81,7 @@ export function DashboardMetrics() {
         <div className="flex items-center gap-2">
           <Button
             variant="outline"
-            onClick={() => refresh()}
+            onClick={() => refetch()}
             disabled={isLoading}
           >
             Refresh
