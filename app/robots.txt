@@ -1,0 +1,10 @@
+User-agent: *
+Allow: /
+
+# Sitemap
+Sitemap: https://saasflow.com/sitemap.xml
+
+# Disallow admin and API routes
+Disallow: /dashboard
+Disallow: /api/
+Disallow: /auth/
